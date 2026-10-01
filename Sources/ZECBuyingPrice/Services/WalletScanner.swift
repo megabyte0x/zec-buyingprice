@@ -86,17 +86,11 @@ final class WalletScanner {
             }
             let fee = transaction.fee?.amount ?? 0
             let flow = try WalletFlow.classify(outputs, balanceDelta: transaction.value.amount, fee: fee)
-            let received = flow.received
-            let sent = flow.sent
             let txid = transaction.rawID.map { String(format: "%02x", $0) }.joined()
-            if received > 0 {
-                result.append(Movement(id: "\(txid):received", date: Date(timeIntervalSince1970: time),
-                    height: height, zatoshis: received, direction: .received,
-                    confirmed: confirmed, transactionIndex: transaction.index ?? 0, feeZatoshis: transaction.fee?.amount))
-            }
-            if sent > 0 {
-                result.append(Movement(id: "\(txid):sent", date: Date(timeIntervalSince1970: time),
-                    height: height, zatoshis: sent, direction: .sent,
+            let amounts: [(Movement.Direction, Int64)] = [(.received, flow.received), (.sent, flow.sent)]
+            for (direction, amount) in amounts where amount > 0 {
+                result.append(Movement(id: "\(txid):\(direction.rawValue)", date: Date(timeIntervalSince1970: time),
+                    height: height, zatoshis: amount, direction: direction,
                     confirmed: confirmed, transactionIndex: transaction.index ?? 0, feeZatoshis: transaction.fee?.amount))
             }
         }

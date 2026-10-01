@@ -7,6 +7,7 @@ struct TransactionTable: View {
     @State private var manualPrice = ""
     @State private var priceError: String?
     var body: some View {
+        let visibleMovements = model.visibleMovements
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 VStack(alignment: .leading, spacing: 5) {
@@ -25,7 +26,7 @@ struct TransactionTable: View {
                     }
                 }.font(.system(size: 12)).padding(10).frame(width: 250).labPanel()
             }
-            Table(model.visibleMovements) {
+            Table(visibleMovements) {
                 TableColumn("Use") { movement in
                     Toggle("Include transaction", isOn: Binding(
                         get: { movement.included },
@@ -73,7 +74,7 @@ struct TransactionTable: View {
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(LabTheme.line))
             .overlay {
-                if model.visibleMovements.isEmpty {
+                if visibleMovements.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: model.movements.isEmpty ? "tray" : "magnifyingglass")
                             .font(.system(size: 29, weight: .light)).foregroundStyle(LabTheme.burgundy)
@@ -103,9 +104,6 @@ struct TransactionTable: View {
                     Button("Cancel") { editedMovement = nil }.buttonStyle(LabButtonStyle()).keyboardShortcut(.cancelAction)
                     Spacer()
                     Button("Save price") {
-                        guard let value = Decimal(string: manualPrice), value > 0, !value.isNaN else {
-                            priceError = "Enter a positive USD price."; return
-                        }
                         model.error = nil
                         model.setManualPrice(movement.id, text: manualPrice)
                         if model.error == nil { editedMovement = nil }

@@ -127,47 +127,38 @@ struct ContentView: View {
 struct AcquisitionSummary: View {
     @Bindable var model: WalletModel
     var body: some View {
+        let result = model.ledger
+        let ledger = try? result.get()
+        let average = model.canDisplayAverage ? ledger?.averagePrice : nil
+        let value = model.canDisplayAverage ? ledger?.value : nil
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 13) {
                 LabCaption(text: "Average acquisition price")
                 HStack(alignment: .firstTextBaseline, spacing: 9) {
-                    Text(average).font(.system(size: 45, weight: .medium, design: .serif)).monospacedDigit()
+                    Text(average.map { "$" + WalletModel.number($0) } ?? "—")
+                        .font(.system(size: 45, weight: .medium, design: .serif)).monospacedDigit()
                     Text("USD / ZEC").font(.system(size: 11, design: .monospaced)).foregroundStyle(LabTheme.muted)
                 }
-                Label(summaryStatus, systemImage: "function")
+                Label(summaryStatus(for: ledger), systemImage: "function")
                     .font(.system(size: 11)).foregroundStyle(LabTheme.muted)
-                if case .failure(let error) = model.ledger {
+                if case .failure(let error) = result {
                     Text(error.localizedDescription).font(.caption).foregroundStyle(LabTheme.burgundy)
                 }
             }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
             VStack(alignment: .leading, spacing: 18) {
-                metric("Selected remaining", remaining, "ZEC")
+                metric("Selected remaining", WalletModel.number(ledger.map { Decimal($0.zatoshis) / 100_000_000 }, digits: 8), "ZEC")
                 Rectangle().fill(LabTheme.line).frame(height: 1)
-                metric("Acquisition value", value, "USD estimate")
+                metric("Acquisition value", value.map { "$" + WalletModel.number($0) } ?? "—", "USD estimate")
             }.padding(24).frame(width: 235).background(LabTheme.blue.opacity(0.32))
         }.background(LabTheme.paper).clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LabTheme.line))
     }
-    private var average: String {
-        if case .success(let ledger) = model.ledger, model.canDisplayAverage, let price = ledger.averagePrice {
-            return "$" + WalletModel.number(price)
-        }
-        return "—"
-    }
-    private var summaryStatus: String {
+    private func summaryStatus(for ledger: LedgerResult?) -> String {
         guard model.canDisplayAverage else { return "Available after analysis completes" }
-        if case .success(let ledger) = model.ledger {
+        if let ledger {
             return ledger.averagePrice == nil ? "No selected remaining holdings" : "Based on your selected movements"
         }
         return "Review the selected movements below"
-    }
-    private var remaining: String {
-        if case .success(let ledger) = model.ledger { return WalletModel.number(Decimal(ledger.zatoshis) / 100_000_000, digits: 8) }
-        return "—"
-    }
-    private var value: String {
-        if case .success(let ledger) = model.ledger, model.canDisplayAverage { return "$" + WalletModel.number(ledger.value) }
-        return "—"
     }
     private func metric(_ title: String, _ value: String, _ unit: String) -> some View {
         VStack(alignment: .leading, spacing: 5) {

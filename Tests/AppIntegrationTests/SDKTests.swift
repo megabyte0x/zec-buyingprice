@@ -1,4 +1,5 @@
 import XCTest
+import AcquisitionCore
 import ZcashLightClientKit
 @testable import ZECBuyingPrice
 
@@ -16,6 +17,22 @@ final class SDKTests: XCTestCase {
             let date = Date(timeIntervalSince1970: checkpoint.time + 172800)
             XCTAssertLessThanOrEqual(BirthdayResolver.height(for: date), checkpoint.height)
         }
+    }
+    @MainActor func testManualPriceValidationPreservesMovement() {
+        let model = WalletModel()
+        model.movements = [Movement(id: "receipt", date: Date(), height: 1,
+            zatoshis: 100_000_000, direction: .received, included: false, price: 30)]
+        for text in ["", "0", "-1", "NaN", "invalid"] {
+            model.error = nil
+            model.setManualPrice("receipt", text: text)
+            XCTAssertEqual(model.error, "Enter a positive USD price.")
+            XCTAssertEqual(model.movements[0].price, 30)
+        }
+        model.error = nil
+        model.setManualPrice("receipt", text: "42.50")
+        XCTAssertNil(model.error)
+        XCTAssertEqual(model.movements[0].price, Decimal(string: "42.50"))
+        XCTAssertFalse(model.movements[0].included)
     }
     @MainActor func testWatchOnlyImport() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
