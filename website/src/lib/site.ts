@@ -7,7 +7,7 @@ export const site = {
   authorUrl: 'https://github.com/megabyte0x',
   version: '0.2.0',
   release: 'https://github.com/megabyte0x/zec-buyingprice/releases/tag/v0.2.0-dev',
-  asset: 'https://github.com/megabyte0x/zec-buyingprice/releases/download/v0.2.0-dev/ZECBuyingPrice-0.2.0-arm64.dmg',
+  asset: 'https://github.com/megabyte0x/zec-buyingprice/releases/download/v0.2.0-dev/ZECBuyingPrice-0.2.0-arm64-notarized.dmg',
 };
 export const faqs = [
   {question:'What does ZEC Buying Price calculate?',answer:'The moving average acquisition price in USD per ZEC for selected confirmed wallet movements. Receipts add quantity and acquisition value. Sends remove both proportionally. The selected ledger can differ from your wallet balance.'},

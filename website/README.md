@@ -33,9 +33,24 @@ Guides live in `src/content/blog/`. Each has a unique intent, a direct answer, s
 
 Canonical URLs and schema constants live in `src/lib/site.ts`. The download URL is deliberately versioned and is mirrored in `public/_redirects`. `public/_headers` applies security and cache headers. RSS, robots, sitemap, and llms.txt are generated during the build. llms.txt is an optional navigation aid; it is not a proven ranking lever.
 
-The development release target is `0.2.0`, with the versioned GitHub prerelease asset `ZECBuyingPrice-0.2.0-arm64.dmg` under `v0.2.0-dev`. The 0.2.0 DMG is Developer ID signed with hardened runtime and a secure timestamp. App and DMG signature checks and disk-image integrity verification passed. Apple notarization and Gatekeeper acceptance have not been verified; the website must state this until a notarization ticket and acceptance checks are confirmed. Signing and notarization status, source revision, download size, and the final SHA-256 checksum are recorded in `src/lib/release.json`. DMGs exceed Pages' 25 MiB per-asset limit, so `/download/` redirects directly to the GitHub binary.
+The development release target is `0.2.0`, with the distinct versioned GitHub prerelease asset `ZECBuyingPrice-0.2.0-arm64-notarized.dmg` under `v0.2.0-dev`. The 0.2.0 DMG is Developer ID signed with hardened runtime and a secure timestamp. The earlier signed-only `ZECBuyingPrice-0.2.0-arm64.dmg` remains available; the distinct notarized asset preserves that original download. App and DMG signature checks and disk-image integrity verification passed. Apple accepted submission `b7d89ac2-45f7-400b-986a-120aeb4f38be`; ticket stapling and validation succeeded, and Gatekeeper accepted the final DMG as Notarized Developer ID. Signing and notarization status, source revision, download size, and the final SHA-256 checksum are recorded in `src/lib/release.json`. DMGs exceed Pages' 25 MiB per-asset limit, so `/download/` redirects directly to the GitHub binary.
 
-To package this signed development release, run `VERSION="0.2.0" BUILD_NUMBER="2" ./script/package_dmg.sh` from the repository root. Adding `NOTARY_PROFILE="zcash-buying-price"` submits the DMG to Apple, staples its ticket, and checks Gatekeeper after notarization is authorized. The package script builds the optimized release app, includes the linked Swift compatibility library, signs with Developer ID, verifies signatures and disk-image integrity, and produces `dist/SHA256SUMS.txt`. Notarization and Gatekeeper checks run only when a notary profile is supplied. Verify architecture and minimum macOS version before changing the filename or platform claims. Publish a new versioned asset and update `src/lib/release.json`, `public/downloads/SHA256SUMS.txt`, release details, and both download URLs together. Do not overwrite an existing release asset silently. Confirm the versioned binary exists on GitHub before deploying its download redirects.
+To package a signed development release, run `VERSION="0.2.0" BUILD_NUMBER="2" ./script/package_dmg.sh` from the repository root. The package script builds the optimized release app, includes the linked Swift compatibility library, signs with Developer ID, verifies signatures and disk-image integrity, and produces `dist/SHA256SUMS.txt`. Supplying a `NOTARY_PROFILE` also submits, staples, and checks Gatekeeper for its output.
+
+For this release, the signed-only GitHub asset is preserved and a distinct copy carries the notarization ticket:
+
+```sh
+cp dist/ZECBuyingPrice-0.2.0-arm64.dmg dist/ZECBuyingPrice-0.2.0-arm64-notarized.dmg
+xcrun notarytool submit dist/ZECBuyingPrice-0.2.0-arm64-notarized.dmg --keychain-profile zcash-buying-price --wait
+xcrun stapler staple dist/ZECBuyingPrice-0.2.0-arm64-notarized.dmg
+xcrun stapler validate dist/ZECBuyingPrice-0.2.0-arm64-notarized.dmg
+codesign --verify --verbose=2 dist/ZECBuyingPrice-0.2.0-arm64-notarized.dmg
+spctl --assess --type open --context context:primary-signature --verbose=2 dist/ZECBuyingPrice-0.2.0-arm64-notarized.dmg
+hdiutil verify dist/ZECBuyingPrice-0.2.0-arm64-notarized.dmg
+(cd dist && shasum -a 256 ZECBuyingPrice-0.2.0-arm64-notarized.dmg > SHA256SUMS-notarized.txt)
+```
+
+Record the final checksum after stapling. Publish the notarized DMG and `SHA256SUMS-notarized.txt` alongside the earlier signed-only release assets. Copy the notarized checksum into the website’s generic `public/downloads/SHA256SUMS.txt` path, and update `src/lib/release.json`, release details, and both download URLs together. Preserve app source revision `9b896125966d36a0fc95cd43a4df3acafeb53154` for this artifact. Verify architecture and minimum macOS version before changing the filename or platform claims. Confirm the exact binary exists on GitHub before deploying its download redirects. Do not overwrite an existing release asset silently.
 
 The 18 passing application tests describe the earlier implementation. The security update has not rerun that suite, and new tests remain deferred; release copy must distinguish this history from packaging checks and native observations. A user screenshot confirmed synchronization while the wallet interface was locked, including the updated progress bar and scanned-block count. Last-window close and quit cleanup, crash cleanup, migration, full scan completion, resume, and reorg handling remain under verification.
 

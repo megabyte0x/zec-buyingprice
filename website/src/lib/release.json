@@ -1,10 +1,10 @@
 {
-  "sha256": "dcff1b788171ca49a3e88fd857fb5ca15df4abaf99fd25a3bd18c28d5049619c",
+  "sha256": "bb256edc70324f7a0c0392a463c6cfd84c09894ea1c9d9eca02b0f71ab7dae99",
   "sizeMiB": "47.7",
   "sourceRevision": "9b896125966d36a0fc95cd43a4df3acafeb53154",
-  "filename": "ZECBuyingPrice-0.2.0-arm64.dmg",
+  "filename": "ZECBuyingPrice-0.2.0-arm64-notarized.dmg",
   "signed": true,
-  "notarized": false,
-  "gatekeeperVerified": false,
-  "sizeBytes": 50001325
+  "notarized": true,
+  "gatekeeperVerified": true,
+  "sizeBytes": 50003204
 }
