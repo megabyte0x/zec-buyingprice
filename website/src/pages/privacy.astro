@@ -1,0 +1,25 @@
+---
+import Document from '../layouts/Document.astro';
+---
+<Document title="Privacy and network behavior" description="How ZEC Buying Price protects viewing keys and wallet history on your Mac, when syncing continues, and which services the app and website contact.">
+  <p>Reviewed 8 October 2026. This page describes the current website and development application. The source code is available for inspection.</p>
+  <h2>The website</h2>
+  <p>This website has no wallet-import form, account system, advertising scripts, or analytics added by the project. Do not enter viewing keys or seed phrases on the website. Cloudflare serves the pages and can process ordinary connection and request information as the hosting provider.</p>
+  <p>The DMG download redirects to GitHub Releases. GitHub handles that download request and can process ordinary connection information. See <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare’s privacy policy</a> and <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub’s privacy statement</a> for provider details.</p>
+  <h2>Credentials on your Mac</h2>
+  <p>The app encrypts your mainnet Unified Full Viewing Key using a key protected by the Mac’s Secure Enclave. Each new wallet session requires Touch ID or your Mac login password. The imported viewing key itself is not stored inside the enclave. The optional CoinGecko API key remains in macOS Keychain. The app does not request a spending key or seed phrase and does not sign transactions.</p>
+  <h2>Local research data</h2>
+  <p>The encrypted credential envelope and an AES-256 encrypted wallet disk image live under <code>~/Library/Application Support/ZECBuyingPrice/protected-vault/</code>. Wallet account data, scan state, SQLite journals, new price caches, transaction choices, and reset archives stay inside the encrypted wallet volume.</p>
+  <p>During the first authenticated unlock, the app migrates its existing wallet history and reset archives into the encrypted volume, verifies the copies, and removes managed plaintext originals and the legacy viewing-key Keychain item. Previous backups and filesystem snapshots may still contain old copies.</p>
+  <h2>When syncing continues</h2>
+  <p>After authentication, mainnet syncing continues while the app is open, including when you switch apps, hide it, or minimize the wallet window. Those actions lock the wallet interface. Authenticate again to see your history without restarting the scan.</p>
+  <p>Closing the last wallet window, quitting, sleeping, or locking the Mac ends the wallet session. The app stops and reaps its sync worker, clears displayed wallet data, and detaches the encrypted volume. The menu also offers a full wallet lock that stops syncing. A cleanup helper watches for unexpected app exit and stops the worker before detaching storage; crash cleanup is best effort. No launch agent or daemon restarts synchronization.</p>
+  <p>The interface lock hides financial data. While syncing continues, the worker still uses the viewing key and the wallet database remains mounted. Encryption protects stored copies after the session closes; it cannot prevent extraction by someone who already controls an unlocked process or erase copies taken earlier. Failed storage cleanup remains visible and blocks a new unlock.</p>
+  <h2>Network requests</h2>
+  <p>The app contacts a configurable TLS lightwalletd endpoint for scanning and CoinGecko for historical USD prices. The default scanning endpoint is <code>zec.rocks:443</code>. Price requests contain the asset and date, rather than the viewing key or transaction identifier.</p>
+  <p>Local storage does not imply anonymous network use. Service providers can observe connection metadata. Review your endpoint and API settings before scanning.</p>
+  <h2>Reset and removal</h2>
+  <p>The app’s reset action archives local scan history and transaction choices inside protected storage after confirmation; it is not a promise to erase all copies. Uninstalling the app does not itself guarantee that support files, Keychain items, or backups are removed. Review those locations separately if you intend to remove the data.</p>
+  <h2>Questions and source</h2>
+  <p>Review the <a href="https://github.com/megabyte0x/zec-buyingprice">repository</a> or open a public issue with non-sensitive details. Never include a viewing key, API key, seed phrase, or unredacted wallet history in an issue.</p>
+</Document>

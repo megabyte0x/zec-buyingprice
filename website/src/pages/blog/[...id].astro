@@ -1,0 +1,11 @@
+---
+import { getCollection, render } from 'astro:content';
+import Document from '../../layouts/Document.astro';
+import { site } from '../../lib/site';
+export async function getStaticPaths() { return (await getCollection('blog')).map(post=>({params:{id:post.id},props:{post}})); }
+const {post} = Astro.props;
+const {Content} = await render(post);
+const url = `${site.url}/blog/${post.id}/`;
+const schema = [{'@context':'https://schema.org','@type':'Article',headline:post.data.title,description:post.data.description,datePublished:post.data.published.toISOString(),dateModified:post.data.updated.toISOString(),author:{'@type':'Person',name:post.data.author,url:site.authorUrl},publisher:{'@id':`${site.url}/#publisher`},image:`${site.url}/images/social.png`,mainEntityOfPage:url},{'@context':'https://schema.org','@type':'BreadcrumbList',itemListElement:[{'@type':'ListItem',position:1,name:'Home',item:site.url},{'@type':'ListItem',position:2,name:'Field notes',item:`${site.url}/blog/`},{'@type':'ListItem',position:3,name:post.data.title,item:url}]}];
+---
+<Document title={post.data.title} description={post.data.summary} label={post.data.category} schema={schema}><div class="byline">By <a href={site.authorUrl}>{post.data.author}</a>, app developer · Published {post.data.published.toLocaleDateString('en-GB',{timeZone:'UTC',day:'numeric',month:'long',year:'numeric'})} · Reviewed {post.data.updated.toLocaleDateString('en-GB',{timeZone:'UTC',day:'numeric',month:'long',year:'numeric'})}</div><Content /><h2>About these field notes</h2><p>Megabyte develops ZEC Buying Price. These guides explain the application’s behavior and cite external documentation where needed. The alternatives article compares documented workflows; it is not an independent product certification.</p><p><a href="/blog/">Browse all guides</a> · <a href="/methodology/">Calculation methodology</a> · <a href="/download/">Download .dmg</a></p></Document>

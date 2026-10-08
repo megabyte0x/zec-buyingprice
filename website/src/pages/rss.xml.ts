@@ -1,0 +1,4 @@
+import { getCollection } from 'astro:content';
+import { site } from '../lib/site';
+const escape=(s:string)=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+export async function GET() {const posts=await getCollection('blog'); return new Response(`<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>ZEC Buying Price field notes</title><link>${site.url}/blog/</link><description>Practical Zcash acquisition research guides.</description><language>en</language>${posts.map(p=>`<item><title>${escape(p.data.title)}</title><link>${site.url}/blog/${p.id}/</link><guid>${site.url}/blog/${p.id}/</guid><description>${escape(p.data.description)}</description><pubDate>${p.data.published.toUTCString()}</pubDate></item>`).join('')}</channel></rss>`,{headers:{'Content-Type':'application/rss+xml; charset=utf-8'}});}

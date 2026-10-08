@@ -1,0 +1,38 @@
+---
+import '../styles/global.css';
+import LinkButton from '../components/LinkButton';
+import { Separator } from '../components/ui/separator';
+import { site } from '../lib/site';
+interface Props { title: string; description: string; schema?: Record<string, unknown> | Record<string, unknown>[]; noindex?: boolean; }
+const { title, description, schema, noindex = false } = Astro.props;
+const canonical = new URL(Astro.url.pathname, site.url).href;
+const baseSchema = [{ '@context':'https://schema.org', '@type':'Organization', '@id':`${site.url}/#publisher`, name:'Megabyte', url:site.authorUrl, sameAs:[site.authorUrl], logo:`${site.url}/images/app-icon.png` },{'@context':'https://schema.org','@type':'WebSite','@id':`${site.url}/#website`,name:site.name,url:site.url,publisher:{'@id':`${site.url}/#publisher`}}];
+const schemas = [...baseSchema, ...(schema ? Array.isArray(schema) ? schema : [schema] : [])];
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title><meta name="description" content={description} />
+    <link rel="canonical" href={canonical} /><meta name="robots" content={noindex ? 'noindex, follow' : 'index, follow, max-image-preview:large'} />
+    <link rel="preload" href="/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <meta name="theme-color" content="#171916" />
+    <link rel="icon" type="image/png" href="/images/app-icon.png" />
+    <link rel="alternate" type="application/rss+xml" title="ZEC Buying Price guides" href="/rss.xml" />
+    <meta property="og:type" content={Astro.url.pathname.startsWith('/blog/') && Astro.url.pathname !== '/blog/' ? 'article' : 'website'} />
+    <meta property="og:title" content={title} /><meta property="og:description" content={description} /><meta property="og:url" content={canonical} />
+    <meta property="og:site_name" content={site.name} /><meta property="og:image" content={`${site.url}/images/social.png`} /><meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" /><meta property="og:image:alt" content="ZEC Buying Price: a local Zcash acquisition notebook for macOS" />
+    <meta name="twitter:card" content="summary_large_image" /><meta name="twitter:title" content={title} /><meta name="twitter:description" content={description} /><meta name="twitter:image" content={`${site.url}/images/social.png`} />
+    {schemas.map((entry) => <script type="application/ld+json" set:html={JSON.stringify(entry).replace(/</g, '\\u003c')} />)}
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header wrap">
+      <a class="brand" href="/"><img src="/images/app-icon.webp" width="38" height="38" alt="" /><span>ZEC <span class="brand-small">Buying Price</span></span></a>
+      <nav aria-label="Main navigation"><a href="/methodology/" aria-current={Astro.url.pathname === '/methodology/' ? 'page' : undefined}>How it works</a><a href="/blog/" aria-current={Astro.url.pathname.startsWith('/blog/') ? 'page' : undefined}>Field notes</a><a href={site.repo} class="source-link">Source code ↗</a></nav>
+      <LinkButton href="/download/" />
+    </header>
+    <main id="main"><slot /></main>
+    <footer class="wrap site-footer"><Separator /><div class="footer-grid"><div><a class="footer-brand" href="/">ZEC Buying Price<span class="accent-dot">.</span></a><p>A local notebook for your Zcash acquisitions.</p><small>Built by <a href={site.authorUrl}>Megabyte</a>. Development build {site.version}.</small></div><nav aria-label="Footer navigation"><a href="/setup/">Setup guide</a><a href="/releases/">Release notes</a><a href="/privacy/">Privacy</a><a href="/blog/zcash-tracker-alternatives/">Alternatives</a><a href={site.repo}>GitHub ↗</a><a href="/rss.xml">RSS</a></nav></div><div class="footer-bottom"><span>© 2026 Megabyte</span><span>For acquisition research. No tax reports or investment advice.</span></div></footer>
+  </body>
+</html>

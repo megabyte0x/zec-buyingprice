@@ -1,0 +1,7 @@
+---
+import Base from '../../layouts/Base.astro';
+import { Badge } from '../../components/ui/badge';
+import { getCollection } from 'astro:content';
+const posts = await getCollection('blog');
+---
+<Base title="Zcash acquisition guides and tracker alternatives | ZEC Buying Price" description="Practical Zcash guides: calculate average buying price, compare trackers, understand viewing keys, correct daily prices, and diagnose incomplete results."><div class="wrap document-shell"><header class="document-header"><p class="eyebrow">The acquisition notebook</p><h1>Field notes<span class="accent-dot">.</span></h1><p class="document-lead">Calculations, records, and the questions a wallet balance can’t answer. Written by <a href="https://github.com/megabyte0x">Megabyte</a>, the app’s developer.</p></header><div class="blog-grid">{posts.map(post=><a class="blog-entry" href={`/blog/${post.id}/`}><Badge variant="outline">{post.data.category}</Badge><h2>{post.data.title}</h2><p>{post.data.summary}</p><div class="byline">2 October 2026 · Read guide ↗</div></a>)}</div></div></Base>
