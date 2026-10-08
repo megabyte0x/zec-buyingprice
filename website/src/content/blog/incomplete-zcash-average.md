@@ -3,11 +3,13 @@ title: Why your Zcash average acquisition price is incomplete
 description: Diagnose unfinished scanning, missing daily prices, oversends, and inconsistent movement selections without mistaking a partial result for a complete ledger.
 category: Troubleshooting
 published: 2026-10-02
-updated: 2026-10-08
+updated: 2026-10-09
 summary: An incomplete result points to unfinished or inconsistent inputs. Check scanning, receipt prices, and selected movements in that order.
 ---
 
 ZEC Buying Price withholds a complete average when required history or pricing is unfinished, or when selected movements do not form a consistent ledger. This is useful information: a missing result can be more accurate than a precise number based on partial data.
+
+During syncing, transactions appear as the SDK discovers and enhances them. The summary can show a provisional average from discovered movements with available receipt prices. More history or prices can change that figure, and sends without sufficient selected priced receipts still prevent a calculation. The provisional label stays separate from a complete result.
 
 ## 1. Check scanning before changing the ledger
 

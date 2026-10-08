@@ -5,9 +5,9 @@ export const site = {
   repo: 'https://github.com/megabyte0x/zec-buyingprice',
   author: 'Megabyte',
   authorUrl: 'https://github.com/megabyte0x',
-  version: '0.2.0',
-  release: 'https://github.com/megabyte0x/zec-buyingprice/releases/tag/v0.2.0-dev',
-  asset: 'https://github.com/megabyte0x/zec-buyingprice/releases/download/v0.2.0-dev/ZECBuyingPrice-0.2.0-arm64-notarized.dmg',
+  version: '0.2.1',
+  release: 'https://github.com/megabyte0x/zec-buyingprice/releases/tag/v0.2.1-dev',
+  asset: 'https://github.com/megabyte0x/zec-buyingprice/releases/download/v0.2.1-dev/ZECBuyingPrice-0.2.1-arm64.dmg',
 };
 export const faqs = [
   {question:'What does ZEC Buying Price calculate?',answer:'The moving average acquisition price in USD per ZEC for selected confirmed wallet movements. Receipts add quantity and acquisition value. Sends remove both proportionally. The selected ledger can differ from your wallet balance.'},
@@ -16,5 +16,5 @@ export const faqs = [
   {question:'Can I use it for a tax return?',answer:'The app is an acquisition research tool. It does not generate tax reports, identify every taxable event, or choose a jurisdiction’s accounting rules. Use complete exchange and wallet records when preparing a return.'},
   {question:'Which Macs are supported?',answer:`The downloadable development build requires an Apple Silicon Mac with Secure Enclave support running macOS 14 or later. An Intel DMG is not provided. ${release.notarized ? 'This DMG is Developer ID signed, notarized by Apple, and includes a stapled notarization ticket.' : release.signed ? 'This DMG is Developer ID signed, but is not notarized by Apple. Gatekeeper acceptance has not been verified.' : 'Packaging and signing checks are pending.'}`},
   {question:'Does scanning stop when I switch apps?',answer:'Syncing continues while the app is open, including when you switch apps, hide it, or minimize its window. The wallet interface locks until you authenticate again. Closing the last wallet window, quitting, sleeping, or locking the Mac ends the session and closes encrypted storage.'},
-  {question:'Why is my average incomplete?',answer:'The app withholds a complete result while scanning or receipt pricing is unfinished. Missing prices, inconsistent selections, selected sends greater than selected holdings, or ambiguous history can also prevent completion.'},
+  {question:'Why is my average incomplete?',answer:'Transactions appear as they are discovered during syncing. A provisional average uses discovered movements with available receipt prices. It changes as more history and prices arrive. A complete result still needs finished scanning, every selected receipt price, consistent selections, and unambiguous history.'},
 ];

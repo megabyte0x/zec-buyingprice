@@ -33,26 +33,19 @@ Guides live in `src/content/blog/`. Each has a unique intent, a direct answer, s
 
 Canonical URLs and schema constants live in `src/lib/site.ts`. The download URL is deliberately versioned and is mirrored in `public/_redirects`. `public/_headers` applies security and cache headers. RSS, robots, sitemap, and llms.txt are generated during the build. llms.txt is an optional navigation aid; it is not a proven ranking lever.
 
-The development release target is `0.2.0`, with the distinct versioned GitHub prerelease asset `ZECBuyingPrice-0.2.0-arm64-notarized.dmg` under `v0.2.0-dev`. The 0.2.0 DMG is Developer ID signed with hardened runtime and a secure timestamp. The earlier signed-only `ZECBuyingPrice-0.2.0-arm64.dmg` remains available; the distinct notarized asset preserves that original download. App and DMG signature checks and disk-image integrity verification passed. Apple accepted submission `b7d89ac2-45f7-400b-986a-120aeb4f38be`; ticket stapling and validation succeeded, and Gatekeeper accepted the final DMG as Notarized Developer ID. Signing and notarization status, source revision, download size, and the final SHA-256 checksum are recorded in `src/lib/release.json`. DMGs exceed Pages' 25 MiB per-asset limit, so `/download/` redirects directly to the GitHub binary.
+The current development release is `0.2.1`, published under `v0.2.1-dev` with the exact asset filename and signing/notarization status recorded in `src/lib/release.json`. The previous 0.2.0 assets remain on their existing release. The website’s release manifest records the app source revision, final checksum, byte size, and verified signing/notarization status. Update that manifest, `src/lib/site.ts`, `public/_redirects`, and `public/downloads/SHA256SUMS.txt` together after inspecting the finished artifact. DMGs exceed Pages’ per-asset limit, so `/download/` redirects to GitHub.
 
-To package a signed development release, run `VERSION="0.2.0" BUILD_NUMBER="2" ./script/package_dmg.sh` from the repository root. The package script builds the optimized release app, includes the linked Swift compatibility library, signs with Developer ID, verifies signatures and disk-image integrity, and produces `dist/SHA256SUMS.txt`. Supplying a `NOTARY_PROFILE` also submits, staples, and checks Gatekeeper for its output.
-
-For this release, the signed-only GitHub asset is preserved and a distinct copy carries the notarization ticket:
+To package and notarize this release from the repository root:
 
 ```sh
-cp dist/ZECBuyingPrice-0.2.0-arm64.dmg dist/ZECBuyingPrice-0.2.0-arm64-notarized.dmg
-xcrun notarytool submit dist/ZECBuyingPrice-0.2.0-arm64-notarized.dmg --keychain-profile zcash-buying-price --wait
-xcrun stapler staple dist/ZECBuyingPrice-0.2.0-arm64-notarized.dmg
-xcrun stapler validate dist/ZECBuyingPrice-0.2.0-arm64-notarized.dmg
-codesign --verify --verbose=2 dist/ZECBuyingPrice-0.2.0-arm64-notarized.dmg
-spctl --assess --type open --context context:primary-signature --verbose=2 dist/ZECBuyingPrice-0.2.0-arm64-notarized.dmg
-hdiutil verify dist/ZECBuyingPrice-0.2.0-arm64-notarized.dmg
-(cd dist && shasum -a 256 ZECBuyingPrice-0.2.0-arm64-notarized.dmg > SHA256SUMS-notarized.txt)
+VERSION=0.2.1 BUILD_NUMBER=3 NOTARY_PROFILE=zcash-buying-price ./script/package_dmg.sh
+cp dist/ZECBuyingPrice-0.2.1-arm64.dmg dist/ZECBuyingPrice-0.2.1-arm64-notarized.dmg
+(cd dist && shasum -a 256 ZECBuyingPrice-0.2.1-arm64-notarized.dmg > SHA256SUMS-notarized.txt)
 ```
 
-Record the final checksum after stapling. Publish the notarized DMG and `SHA256SUMS-notarized.txt` alongside the earlier signed-only release assets. Copy the notarized checksum into the website’s generic `public/downloads/SHA256SUMS.txt` path, and update `src/lib/release.json`, release details, and both download URLs together. Preserve app source revision `9b896125966d36a0fc95cd43a4df3acafeb53154` for this artifact. Verify architecture and minimum macOS version before changing the filename or platform claims. Confirm the exact binary exists on GitHub before deploying its download redirects. Do not overwrite an existing release asset silently.
+The package script builds the optimized app, includes its Swift compatibility library, signs with Developer ID and hardened runtime, and verifies the signatures and disk image. With `NOTARY_PROFILE`, it also submits to Apple, staples the accepted ticket, and checks Gatekeeper. Record the checksum after stapling and verify the included app read-only before publishing. Publish new versioned assets without overwriting older downloads, confirm the GitHub binary exists, then deploy the website.
 
-The 18 passing application tests describe the earlier implementation. The security update has not rerun that suite, and new tests remain deferred; release copy must distinguish this history from packaging checks and native observations. A user screenshot confirmed synchronization while the wallet interface was locked, including the updated progress bar and scanned-block count. Last-window close and quit cleanup, crash cleanup, migration, full scan completion, resume, and reorg handling remain under verification.
+Version 0.2.1 shows transactions and provisional acquisition values during syncing, preserves selections and prices across incoming snapshots, and reduces repeated database and price work. One focused progressive-sync regression test passed. The earlier 18-test suite was not rerun for this release. Full-sync performance, complete receipt/spend scanning, shutdown/crash cleanup, migration, resume, and controlled reorg behavior remain under verification; release copy must keep those limits separate from successful distribution checks.
 
 ## References applied
 

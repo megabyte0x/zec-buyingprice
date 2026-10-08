@@ -1,1 +1,1 @@
-bb256edc70324f7a0c0392a463c6cfd84c09894ea1c9d9eca02b0f71ab7dae99  ZECBuyingPrice-0.2.0-arm64-notarized.dmg
+fd3ecec5f2c6982119bede40d544d9f57110f9eb909e87b182ce412a848ac21c  ZECBuyingPrice-0.2.1-arm64.dmg
