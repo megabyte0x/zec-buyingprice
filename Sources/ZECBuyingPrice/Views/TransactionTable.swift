@@ -80,7 +80,7 @@ struct TransactionTable: View {
                             .font(.system(size: 29, weight: .light)).foregroundStyle(LabTheme.burgundy)
                         Text(model.movements.isEmpty ? "The notebook is waiting." : "No matching movements")
                             .font(LabTheme.heading(23))
-                        Text(model.movements.isEmpty ? "Your movements will appear after the wallet scan finishes." : "Try a transaction ID, “received”, or “sent”.")
+                        Text(model.movements.isEmpty ? "Your movements appear as the wallet discovers them during syncing." : "Try a transaction ID, “received”, or “sent”.")
                             .font(.system(size: 12)).foregroundStyle(LabTheme.muted)
                         if !model.search.isEmpty {
                             Button("Clear search") { model.search = "" }.buttonStyle(LabButtonStyle())

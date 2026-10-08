@@ -22,8 +22,9 @@ final class WalletScanner {
 
     var synchronizer: SDKSynchronizer?
     private var observation: AnyCancellable?
-    private var databaseURL: URL?
-    private var walletBirthday: Int?
+    private var historyReader: WalletHistoryReader?
+    private var transactionObservation: AnyCancellable?
+    var onTransactionsChanged: (() -> Void)?
     var onState: ((SynchronizerState) -> Void)?
 
     func configure(key: String, birthday: Int, directory: URL, host: String, port: Int) async throws {
@@ -51,8 +52,14 @@ final class WalletScanner {
                 zip32AccountIndex: nil, purpose: .viewOnly, name: "Acquisition account", keySource: nil, birthday: birthday)
         }
         synchronizer = sync
-        databaseURL = directory.appendingPathComponent("wallet.db")
-        walletBirthday = birthday
+        historyReader = try WalletHistoryReader(databaseURL: directory.appendingPathComponent("wallet.db"), birthday: birthday)
+        transactionObservation = sync.eventStream.receive(on: DispatchQueue.main).sink { [weak self] event in
+            switch event {
+            case .foundTransactions, .minedTransaction, .storedUTXOs:
+                self?.onTransactionsChanged?()
+            case .connectionStateChanged: break
+            }
+        }
         observation = sync.stateStream.receive(on: DispatchQueue.main).sink { [weak self] state in
             self?.onState?(state)
         }
@@ -64,13 +71,41 @@ final class WalletScanner {
         observation?.cancel()
         observation = nil
         synchronizer = nil
-        databaseURL = nil
-        walletBirthday = nil
+        transactionObservation?.cancel()
+        transactionObservation = nil
+        historyReader = nil
     }
 
-    func scanMetrics() throws -> ScanMetrics? {
-        guard let databaseURL, let walletBirthday else { return nil }
-        let database = try Connection(databaseURL.path, readonly: true)
+    func scanMetrics() async throws -> ScanMetrics? {
+        try await historyReader?.scanMetrics()
+    }
+
+    func movements() async throws -> WalletHistorySnapshot {
+        guard let sync = synchronizer, let historyReader else {
+            return WalletHistorySnapshot(movements: [], incompleteTransactionCount: 0)
+        }
+        return try await historyReader.movements(transactions: sync.allTransactions())
+    }
+}
+
+struct WalletHistorySnapshot: Sendable {
+    let movements: [Movement]
+    let incompleteTransactionCount: Int
+}
+
+private actor WalletHistoryReader {
+    private let database: Connection
+    private let walletBirthday: Int
+    private let outputs: Statement
+
+    init(databaseURL: URL, birthday: Int) throws {
+        database = try Connection(databaseURL.path, readonly: true)
+        database.busyTimeout = 1
+        walletBirthday = birthday
+        outputs = try database.prepare("SELECT value, from_account_uuid, to_account_uuid, is_change FROM v_tx_outputs WHERE txid = ?")
+    }
+
+    func scanMetrics() throws -> WalletScanner.ScanMetrics {
         // The pinned Rust SDK stores nonoverlapping, end-exclusive scan ranges;
         // priority 10 means Scanned. Requeued ranges no longer count as complete.
         let statement = try database.prepare("""
@@ -81,49 +116,57 @@ final class WalletScanner {
             """, Int64(walletBirthday), Int64(walletBirthday), Int64(walletBirthday))
         guard let row = try statement.failableNext(), let count = row[0] as? Int64,
               count >= 0, count <= Int64(UInt32.max) else {
-            throw Failure.unavailableHistory
+            throw WalletScanner.Failure.unavailableHistory
         }
         let maximum = row[1] as? Int64
         guard maximum.map({ $0 >= 0 && $0 <= Int64(UInt32.max) }) ?? true else {
-            throw Failure.unavailableHistory
+            throw WalletScanner.Failure.unavailableHistory
         }
-        return ScanMetrics(scannedBlockCount: Int(count), maxScannedHeight: maximum.map(Int.init))
+        return WalletScanner.ScanMetrics(scannedBlockCount: Int(count), maxScannedHeight: maximum.map(Int.init))
     }
 
-    func movements() async throws -> [Movement] {
-        guard let sync = synchronizer, let databaseURL else { return [] }
-        let database = try Connection(databaseURL.path, readonly: true)
+    func movements(transactions: [ZcashTransaction.Overview]) throws -> WalletHistorySnapshot {
         var result: [Movement] = []
-        for transaction in await sync.transactions {
-            if transaction.state == .expired { continue }
-            let confirmed = transaction.state == .confirmed
-            if confirmed && (transaction.minedHeight == nil || transaction.blockTime == nil) {
-                throw Failure.unavailableHistory
-            }
-            guard let time = transaction.blockTime else { continue }
-            let height = transaction.minedHeight ?? Int.max
-            if transaction.isShielding || transaction.poolCrossingValue != nil { continue }
-            let rows = try database.prepare("SELECT value, from_account_uuid, to_account_uuid, is_change FROM v_tx_outputs WHERE txid = ?",
-                Blob(bytes: Array(transaction.rawID)))
-            let account = transaction.accountUUID.id
-            let outputs = try rows.map { row -> WalletFlow.Output in
-                guard let amount = row[0] as? Int64, let change = row[3] as? Int64 else {
-                    throw Failure.unavailableHistory
+        var incomplete = 0
+        // Keep every output read in this snapshot consistent while the SDK writes new batches.
+        try database.transaction(.deferred) {
+            for transaction in transactions {
+                if transaction.state == .expired { continue }
+                if transaction.isShielding || transaction.poolCrossingValue != nil { continue }
+                let confirmed = transaction.state == .confirmed
+                guard let time = transaction.blockTime, !confirmed || transaction.minedHeight != nil else {
+                    if confirmed { incomplete += 1 }
+                    continue
                 }
-                return WalletFlow.Output(amount: amount,
-                    fromOwned: (row[1] as? Blob)?.bytes == account,
-                    toOwned: (row[2] as? Blob)?.bytes == account, change: change != 0)
-            }
-            let fee = transaction.fee?.amount ?? 0
-            let flow = try WalletFlow.classify(outputs, balanceDelta: transaction.value.amount, fee: fee)
-            let txid = transaction.rawID.map { String(format: "%02x", $0) }.joined()
-            let amounts: [(Movement.Direction, Int64)] = [(.received, flow.received), (.sent, flow.sent)]
-            for (direction, amount) in amounts where amount > 0 {
-                result.append(Movement(id: "\(txid):\(direction.rawValue)", date: Date(timeIntervalSince1970: time),
-                    height: height, zatoshis: amount, direction: direction,
-                    confirmed: confirmed, transactionIndex: transaction.index ?? 0, feeZatoshis: transaction.fee?.amount))
+                let account = transaction.accountUUID.id
+                _ = outputs.bind(Blob(bytes: Array(transaction.rawID)))
+                var classifiedOutputs: [WalletFlow.Output] = []
+                while let row = try outputs.failableNext() {
+                    guard let amount = row[0] as? Int64, let change = row[3] as? Int64 else {
+                        throw WalletScanner.Failure.unavailableHistory
+                    }
+                    classifiedOutputs.append(WalletFlow.Output(amount: amount,
+                        fromOwned: (row[1] as? Blob)?.bytes == account,
+                        toOwned: (row[2] as? Blob)?.bytes == account, change: change != 0))
+                }
+                let flow: (received: Int64, sent: Int64)
+                do {
+                    flow = try WalletFlow.classify(classifiedOutputs,
+                        balanceDelta: transaction.value.amount, fee: transaction.fee?.amount ?? 0)
+                } catch {
+                    // Enhancement may still be filling in this transaction's outputs.
+                    incomplete += 1
+                    continue
+                }
+                let txid = transaction.rawID.map { String(format: "%02x", $0) }.joined()
+                let amounts: [(Movement.Direction, Int64)] = [(.received, flow.received), (.sent, flow.sent)]
+                for (direction, amount) in amounts where amount > 0 {
+                    result.append(Movement(id: "\(txid):\(direction.rawValue)", date: Date(timeIntervalSince1970: time),
+                        height: transaction.minedHeight ?? Int.max, zatoshis: amount, direction: direction,
+                        confirmed: confirmed, transactionIndex: transaction.index ?? 0, feeZatoshis: transaction.fee?.amount))
+                }
             }
         }
-        return result
+        return WalletHistorySnapshot(movements: result, incompleteTransactionCount: incomplete)
     }
 }

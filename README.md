@@ -55,7 +55,7 @@ The script creates `dist/ZECBuyingPrice.app`, signs it locally, and launches it.
 ## Package a release
 
 ```sh
-VERSION="0.2.0" BUILD_NUMBER="2" NOTARY_PROFILE="zcash-buying-price" ./script/package_dmg.sh
+VERSION="0.2.1" BUILD_NUMBER="3" NOTARY_PROFILE="zcash-buying-price" ./script/package_dmg.sh
 ```
 
 This builds the optimized Apple Silicon app, signs the app and DMG with Developer ID and a secure timestamp, submits the DMG to Apple, staples the notarization ticket, and checks Gatekeeper acceptance. The default identity is `Developer ID Application: Yash Garg (9UR77TD484)`; override it with `SIGNING_IDENTITY` if needed. `VERSION` and `BUILD_NUMBER` default to `0.1.0` and `1`. Output is `dist/ZECBuyingPrice-<version>-arm64.dmg`, with its final checksum in `dist/SHA256SUMS.txt`. Omitting `NOTARY_PROFILE` produces a signed DMG without notarization.
@@ -84,6 +84,16 @@ On the first authenticated unlock, existing wallet directories and reset archive
 Selected confirmed receipts add ZEC and acquisition value at the historical or manually entered price. Selected sends remove ZEC and acquisition value proportionally at the running average. Sending does not change the average of the remaining holdings. Pending movements are excluded. Network fees are available in transaction tooltips and do not form purchases. The selected accounting ledger is distinct from the actual wallet balance.
 
 Missing prices and sends exceeding the selected holdings prevent a complete average. Excluding a receipt can make later selected sends inconsistent. SDK output information is reconciled against each transaction's account balance change; ambiguous history fails visibly rather than being presented as a complete average.
+
+## Progressive syncing
+
+Transactions appear during synchronization as the SDK discovers and enhances them, and saved history appears when the worker starts. Each new snapshot replaces the previous history, preserves saved selections and prices for unchanged transaction dates, and allows earlier receipts to recalculate the running acquisition value. The summary is labeled provisional while scanning or pricing is in progress. It uses discovered movements with available receipt prices; sends still must reconcile against those selected receipts. Once synchronization and pricing finish, the complete calculation requires every selected receipt price. Pending movements remain excluded.
+
+The worker coalesces history refresh requests, keeps one read-only database connection on a background actor, reuses the transaction-output query, and limits scan-metric reads to once per second with a final completion refresh. Historical prices are fetched once per UTC day per pricing pass; failed dates wait for an explicit retry, and new snapshots are applied while pricing continues. Incomplete transaction classifications are withheld and counted visibly. If details remain incomplete after sync, a complete average stays unavailable.
+
+[Vizor's sync provider](https://github.com/chainapsis/vizor-wallet/blob/main/lib/src/providers/sync_provider.dart) refreshes history on transaction discovery or sync completion. Its [Rust engine](https://github.com/chainapsis/vizor-wallet/blob/main/rust/src/wallet/sync_engine/mod.rs) also uses desktop batches of 2,000 blocks, smaller batches in the spam-heavy historical range, and next-batch prefetching. Its [memory block source](https://github.com/chainapsis/vizor-wallet/blob/main/rust/src/wallet/sync_engine/block_source.rs) avoids the disk block cache. The pinned Swift SDK already prefetches blocks but does not expose its internal batch configuration or an in-memory block source through its public initializer. This change adopts the event-driven refresh approach and reduces application overhead; it does not replace the SDK scanning engine or establish a measured full-sync speedup.
+
+Validation for this change is limited to one focused regression test for progressive history and acquisition-value updates, plus compiling and staging the macOS app. A real-wallet full-sync performance benchmark and interactive verification of transaction discovery remain outstanding.
 
 ## Historical-price limitations
 

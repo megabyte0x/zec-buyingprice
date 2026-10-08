@@ -38,6 +38,13 @@ private final class WalletWorkerRuntime {
     private var configured = false
     private var receivedConfiguration = false
     private var syncActivity: NSObjectProtocol?
+    private var metricsTask: Task<Void, Never>?
+    private var lastMetricsRead = Date.distantPast
+    private var metricsPending = false
+    private var cachedMetrics: WalletScanner.ScanMetrics?
+    private var latestSyncEvent: WalletWorkerEvent?
+    private var previousProgress: Double = 0
+    private var previousScannedHeight: Int = 0
 
     init(parent: pid_t, output: Int32) {
         self.parent = parent
@@ -56,6 +63,10 @@ private final class WalletWorkerRuntime {
     func run() {
         guard parentSessionIsRunning else { _exit(0) }
         scanner.onState = { [weak self] state in self?.receive(state) }
+        scanner.onTransactionsChanged = { [weak self] in
+            guard let self, self.configured else { return }
+            self.enqueue(WalletWorkerCommand(kind: "movements"))
+        }
         let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInitiated))
         timer.schedule(deadline: .now(), repeating: .milliseconds(100))
         timer.setEventHandler { [weak self, parent] in
@@ -91,7 +102,9 @@ private final class WalletWorkerRuntime {
     }
 
     private func enqueue(_ command: WalletWorkerCommand) {
-        guard parentSessionIsRunning, commands.count < 32 else { _exit(0) }
+        guard parentSessionIsRunning else { _exit(0) }
+        if command.kind == "movements", commands.contains(where: { $0.kind == "movements" }) { return }
+        guard commands.count < 32 else { _exit(0) }
         if command.kind == "configure" {
             guard !receivedConfiguration else { _exit(1) }
             receivedConfiguration = true
@@ -127,6 +140,7 @@ private final class WalletWorkerRuntime {
                 directory: URL(fileURLWithPath: directory), host: host, port: port)
             guard parentSessionIsRunning else { _exit(0) }
             configured = true
+            enqueue(WalletWorkerCommand(kind: "movements"))
             setSyncActivity(true)
             try await scanner.start()
         case "pause":
@@ -139,9 +153,10 @@ private final class WalletWorkerRuntime {
             try await scanner.start()
         case "movements":
             guard configured else { throw WalletWorkerFailure.invalidProtocol }
-            let movements = try await scanner.movements()
+            let snapshot = try await scanner.movements()
             guard parentSessionIsRunning else { _exit(0) }
-            emit(WalletWorkerEvent(kind: "movements", movements: movements))
+            emit(WalletWorkerEvent(kind: "movements", movements: snapshot.movements,
+                incompleteTransactionCount: snapshot.incompleteTransactionCount))
         default: throw WalletWorkerFailure.invalidProtocol
         }
     }
@@ -166,12 +181,45 @@ private final class WalletWorkerRuntime {
             event = WalletWorkerEvent(kind: "error")
         case .unprepared: return
         }
-        if event.kind == "syncing" || event.kind == "upToDate",
-           let metrics = try? scanner.scanMetrics() {
-            event.scannedBlockCount = metrics.scannedBlockCount
-            event.maxScannedHeight = metrics.maxScannedHeight
-        }
+        event.scannedBlockCount = cachedMetrics?.scannedBlockCount
+        event.maxScannedHeight = cachedMetrics?.maxScannedHeight
+        latestSyncEvent = event
         emit(event)
+        guard configured else { return }
+        if event.kind == "upToDate" || event.kind == "stopped" ||
+            (event.kind == "syncing" && ((event.progress ?? 0) < previousProgress ||
+                (event.scannedHeight ?? 0) < previousScannedHeight)) {
+            enqueue(WalletWorkerCommand(kind: "movements"))
+        }
+        if event.kind == "syncing" || event.kind == "upToDate" {
+            previousProgress = event.progress ?? 0
+            previousScannedHeight = event.scannedHeight ?? 0
+            refreshMetrics(force: event.kind == "upToDate")
+        }
+    }
+
+    private func refreshMetrics(force: Bool) {
+        if metricsTask != nil {
+            if force { metricsPending = true }
+            return
+        }
+        guard force || Date().timeIntervalSince(lastMetricsRead) >= 1 else { return }
+        lastMetricsRead = Date()
+        metricsTask = Task { [weak self] in
+            guard let self else { return }
+            self.cachedMetrics = try? await self.scanner.scanMetrics()
+            guard self.parentSessionIsRunning else { _exit(0) }
+            if var event = self.latestSyncEvent, event.kind == "syncing" || event.kind == "upToDate" {
+                event.scannedBlockCount = self.cachedMetrics?.scannedBlockCount
+                event.maxScannedHeight = self.cachedMetrics?.maxScannedHeight
+                self.emit(event)
+            }
+            self.metricsTask = nil
+            if self.metricsPending {
+                self.metricsPending = false
+                self.refreshMetrics(force: true)
+            }
+        }
     }
 
     private func setSyncActivity(_ active: Bool) {

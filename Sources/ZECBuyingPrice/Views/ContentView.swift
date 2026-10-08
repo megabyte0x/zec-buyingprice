@@ -108,6 +108,14 @@ struct ContentView: View {
             ProgressView(value: model.progress).progressViewStyle(ScanProgressBarStyle())
             Text(model.scanBlockSummary)
                 .font(.system(size: 12, design: .monospaced)).foregroundStyle(LabTheme.muted)
+            if model.incompleteTransactionCount > 0 {
+                Text("\(model.incompleteTransactionCount) transactions awaiting complete details")
+                    .font(.system(size: 11)).foregroundStyle(LabTheme.muted)
+            }
+            if model.pricingFailures > 0 {
+                Text("Prices unavailable for \(model.pricingFailures) dates • retry historical prices or enter them manually")
+                    .font(.system(size: 11)).foregroundStyle(LabTheme.burgundy)
+            }
             if let history = model.scanHistorySummary {
                 Text(history).font(.system(size: 11)).foregroundStyle(LabTheme.muted)
                     .help("Blocks can be scanned in a different order. This height advances after every earlier block has been scanned.")
@@ -159,7 +167,7 @@ struct AcquisitionSummary: View {
                 }
             }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
             VStack(alignment: .leading, spacing: 18) {
-                metric("Selected remaining", WalletModel.number(ledger.map { Decimal($0.zatoshis) / 100_000_000 }, digits: 8), "ZEC")
+                metric(model.analysisIsProvisional ? "Selected priced remaining" : "Selected remaining", WalletModel.number(ledger.map { Decimal($0.zatoshis) / 100_000_000 }, digits: 8), "ZEC")
                 Rectangle().fill(LabTheme.line).frame(height: 1)
                 metric("Acquisition value", value.map { "$" + WalletModel.number($0) } ?? "—", "USD estimate")
             }.padding(24).frame(width: 235).background(LabTheme.blue.opacity(0.32))
@@ -167,7 +175,11 @@ struct AcquisitionSummary: View {
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LabTheme.line))
     }
     private func summaryStatus(for ledger: LedgerResult?) -> String {
-        guard model.canDisplayAverage else { return "Available after analysis completes" }
+        guard model.canDisplayAverage else { return "Some transaction details are unavailable" }
+        if model.analysisIsProvisional {
+            return "Provisional • discovered movements with available receipt prices"
+        }
+        if model.pricingFailures > 0 { return "Some historical prices are unavailable • retry or enter prices below" }
         if let ledger {
             return ledger.averagePrice == nil ? "No selected remaining holdings" : "Based on your selected movements"
         }

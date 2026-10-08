@@ -29,6 +29,8 @@ final class WalletModel {
     var scanComplete = false
     var effectiveBirthday = 0
     var pricingFailures = 0
+    var incompleteTransactionCount = 0
+    private var historyIsCurrent = false
     var search = ""
     private var choosingNewWallet = false
     @ObservationIgnored private let vault: WalletVault
@@ -46,6 +48,8 @@ final class WalletModel {
     @ObservationIgnored private var walletDirectory: URL?
     @ObservationIgnored private var choices: ChoiceStore?
     @ObservationIgnored private var priceService: HistoricalPriceService?
+    @ObservationIgnored private var failedPriceDays = Set<String>()
+    @ObservationIgnored private var pricingPaused = false
 
     init(root: URL? = nil, sessionEligible: (() -> Bool)? = nil, unlockEligible: (() -> Bool)? = nil) {
         let eligible = sessionEligible ?? { WalletLifecycle.sessionEligible }
@@ -83,8 +87,11 @@ final class WalletModel {
             $0.direction.rawValue.localizedCaseInsensitiveContains(search) }
             .sorted { $0.height == $1.height ? $0.id > $1.id : $0.height > $1.height }
     }
-    var ledger: Result<LedgerResult, Error> { Result { try AcquisitionLedger.calculate(movements) } }
-    var canDisplayAverage: Bool { interfaceAuthorized && scanComplete && !busy }
+    var ledger: Result<LedgerResult, Error> {
+        Result { try AcquisitionLedger.calculate(movements, availablePricesOnly: analysisIsProvisional) }
+    }
+    var canDisplayAverage: Bool { interfaceAuthorized && (!scanComplete || (historyIsCurrent && incompleteTransactionCount == 0)) }
+    var analysisIsProvisional: Bool { !scanComplete || busy || !historyIsCurrent || incompleteTransactionCount > 0 }
     var scanBlockSummary: String {
         var parts: [String] = []
         if let scannedBlockCount { parts.append("\(scannedBlockCount.formatted()) blocks scanned") }
@@ -214,16 +221,18 @@ final class WalletModel {
             updateScanMetrics(event)
             status = "Scanning mainnet"
         case "upToDate":
+            if !scanComplete { historyIsCurrent = false }
             scanComplete = true
             progress = 1
             updateScanMetrics(event)
             status = "Mainnet scan complete"
-            refreshPrices()
         case "stopped":
             scanComplete = false
             status = "Scan paused • encrypted progress is saved"
         case "movements":
             guard let fetched = event.movements else { return }
+            historyIsCurrent = true
+            incompleteTransactionCount = event.incompleteTransactionCount ?? 0
             priceMovements(fetched)
         case "error":
             if lock() { error = "Wallet processing stopped. Unlock again to retry from saved progress." }
@@ -239,13 +248,20 @@ final class WalletModel {
     }
 
     func refreshPrices() {
-        guard authorized, refreshTask == nil else { return }
+        guard authorized else { return }
+        failedPriceDays.removeAll()
+        pricingFailures = 0
+        pricingPaused = false
         do { try worker.requestMovements() }
         catch { if lock() { self.error = "Wallet history is unavailable. Unlock again to retry." } }
     }
 
     private func priceMovements(_ incoming: [Movement]) {
-        guard authorized, refreshTask == nil, let token = activeToken else { return }
+        guard authorized, let token = activeToken else { return }
+        movements = MovementSnapshot.reconcile(incoming, previous: movements, choices: choices?.choices ?? [:])
+        // Apply every snapshot immediately, including arrivals while a price request is in flight.
+        guard refreshTask == nil, !pricingPaused else { return }
+        busy = true
         refreshTask = Task { [weak self] in
             guard let self else { return }
             defer {
@@ -253,44 +269,30 @@ final class WalletModel {
             }
             guard self.session.accepts(token) else { return }
             self.busy = true
-            self.error = nil
-            self.pricingFailures = 0
-            var fetched = incoming
-            for index in fetched.indices {
-                if let choice = self.choices?.choices[fetched[index].id] {
-                    fetched[index].included = choice.included
-                    fetched[index].price = choice.manualPrice
-                }
-            }
-            self.movements = fetched
             do {
-                for index in fetched.indices {
+                while let next = self.movements.first(where: {
+                    $0.confirmed && $0.price == nil && !self.failedPriceDays.contains(HistoricalPriceService.day($0.date))
+                }) {
                     try Task.checkCancellation()
-                    guard self.session.accepts(token) else { throw CancellationError() }
-                    self.status = "Fetching historical prices • \(index + 1) / \(fetched.count)"
-                    if fetched[index].price == nil && fetched[index].confirmed {
-                        do { fetched[index].price = try await self.priceService?.price(on: fetched[index].date) }
-                        catch is CancellationError { throw CancellationError() }
-                        catch {
-                            guard self.session.accepts(token), !Task.isCancelled else { throw CancellationError() }
-                            self.pricingFailures += 1
+                    guard self.session.accepts(token), let service = self.priceService else { break }
+                    let day = HistoricalPriceService.day(next.date)
+                    do {
+                        let price = try await service.price(on: next.date)
+                        guard self.session.accepts(token), !Task.isCancelled else { throw CancellationError() }
+                        for index in self.movements.indices where HistoricalPriceService.day(self.movements[index].date) == day {
+                            if self.movements[index].price == nil {
+                                self.movements[index].price = self.choices?.choices[self.movements[index].id]?.manualPrice ?? price
+                            }
                         }
-                    }
-                    guard self.session.accepts(token), !Task.isCancelled else { throw CancellationError() }
-                    if let currentIndex = self.movements.firstIndex(where: { $0.id == fetched[index].id }) {
-                        self.movements[currentIndex].price = self.choices?.choices[fetched[index].id]?.manualPrice ?? fetched[index].price
+                    } catch is CancellationError { throw CancellationError() }
+                    catch {
+                        guard self.session.accepts(token), !Task.isCancelled else { throw CancellationError() }
+                        self.failedPriceDays.insert(day)
+                        self.pricingFailures = self.failedPriceDays.count
                     }
                 }
-                guard self.session.accepts(token) else { return }
-                self.status = self.pricingFailures == 0 ? "Synchronized • \(fetched.count) confirmed movements" :
-                    "Synchronized • \(self.pricingFailures) historical prices unavailable"
-            } catch is CancellationError {
-                if self.session.accepts(token) { self.status = "Price retrieval paused" }
             } catch {
-                if self.session.accepts(token) {
-                    self.error = "Transaction history could not be classified completely. No complete average can be shown."
-                    self.scanComplete = false
-                }
+                // Cancellation leaves the already discovered and priced movements available.
             }
         }
     }
@@ -317,6 +319,7 @@ final class WalletModel {
 
     func pause() {
         guard interfaceAuthorized else { return }
+        pricingPaused = true
         worker.pause()
         refreshTask?.cancel()
     }
@@ -392,6 +395,11 @@ final class WalletModel {
         worker.close()
         choices = nil
         priceService = nil
+        failedPriceDays.removeAll()
+        pricingFailures = 0
+        incompleteTransactionCount = 0
+        pricingPaused = false
+        historyIsCurrent = false
         walletDirectory = nil
         key = ""
         connected = false
@@ -435,7 +443,11 @@ final class WalletModel {
 
     func resume() {
         guard interfaceAuthorized else { error = "Unlock your wallet before resuming."; return }
-        do { try worker.resume() }
+        pricingPaused = false
+        do {
+            try worker.resume()
+            try worker.requestMovements()
+        }
         catch { if lock() { self.error = "The scan could not resume. Unlock and retry." } }
     }
 }

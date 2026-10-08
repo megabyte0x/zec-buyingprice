@@ -20,10 +20,12 @@ public enum LedgerError: Error, LocalizedError {
 }
 
 public enum AcquisitionLedger {
-    public static func calculate(_ movements: [Movement]) throws -> LedgerResult {
+    public static func calculate(_ movements: [Movement], availablePricesOnly: Bool = false) throws -> LedgerResult {
         var quantity: Int64 = 0
         var cost: Decimal = 0
-        let ordered = movements.filter { $0.included && $0.confirmed }.sorted {
+        let ordered = movements.filter {
+            $0.included && $0.confirmed && (!availablePricesOnly || $0.direction == .sent || $0.price != nil)
+        }.sorted {
             if $0.height != $1.height { return $0.height < $1.height }
             if $0.transactionIndex != $1.transactionIndex { return $0.transactionIndex < $1.transactionIndex }
             if $0.date != $1.date { return $0.date < $1.date }

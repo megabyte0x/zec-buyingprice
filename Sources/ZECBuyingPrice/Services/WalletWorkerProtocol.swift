@@ -9,6 +9,7 @@ struct WalletWorkerEvent: Codable, Sendable {
     var scannedBlockCount: Int? = nil
     var maxScannedHeight: Int? = nil
     var movements: [Movement]? = nil
+    var incompleteTransactionCount: Int? = nil
 
     func validate() throws {
         guard ["syncing", "upToDate", "stopped", "movements", "error"].contains(kind),
@@ -17,6 +18,7 @@ struct WalletWorkerEvent: Codable, Sendable {
               tipHeight.map({ $0 >= 0 }) ?? true,
               scannedBlockCount.map({ $0 >= 0 && $0 <= Int(UInt32.max) }) ?? true,
               maxScannedHeight.map({ $0 >= 0 && $0 <= Int(UInt32.max) }) ?? true,
+              incompleteTransactionCount.map({ $0 >= 0 }) ?? true,
               kind != "movements" || movements != nil else {
             throw WalletWorkerFailure.invalidProtocol
         }
