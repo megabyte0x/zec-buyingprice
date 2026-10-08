@@ -15,9 +15,15 @@ final class WalletScanner {
             }
         }
     }
+    struct ScanMetrics {
+        let scannedBlockCount: Int
+        let maxScannedHeight: Int?
+    }
+
     var synchronizer: SDKSynchronizer?
     private var observation: AnyCancellable?
     private var databaseURL: URL?
+    private var walletBirthday: Int?
     var onState: ((SynchronizerState) -> Void)?
 
     func configure(key: String, birthday: Int, directory: URL, host: String, port: Int) async throws {
@@ -46,6 +52,7 @@ final class WalletScanner {
         }
         synchronizer = sync
         databaseURL = directory.appendingPathComponent("wallet.db")
+        walletBirthday = birthday
         observation = sync.stateStream.receive(on: DispatchQueue.main).sink { [weak self] state in
             self?.onState?(state)
         }
@@ -58,6 +65,29 @@ final class WalletScanner {
         observation = nil
         synchronizer = nil
         databaseURL = nil
+        walletBirthday = nil
+    }
+
+    func scanMetrics() throws -> ScanMetrics? {
+        guard let databaseURL, let walletBirthday else { return nil }
+        let database = try Connection(databaseURL.path, readonly: true)
+        // The pinned Rust SDK stores nonoverlapping, end-exclusive scan ranges;
+        // priority 10 means Scanned. Requeued ranges no longer count as complete.
+        let statement = try database.prepare("""
+            SELECT COALESCE(SUM(block_range_end - MAX(block_range_start, ?)), 0),
+                   (SELECT MAX(height) FROM blocks WHERE height >= ?)
+            FROM scan_queue
+            WHERE priority = 10 AND block_range_end > ?
+            """, Int64(walletBirthday), Int64(walletBirthday), Int64(walletBirthday))
+        guard let row = try statement.failableNext(), let count = row[0] as? Int64,
+              count >= 0, count <= Int64(UInt32.max) else {
+            throw Failure.unavailableHistory
+        }
+        let maximum = row[1] as? Int64
+        guard maximum.map({ $0 >= 0 && $0 <= Int64(UInt32.max) }) ?? true else {
+            throw Failure.unavailableHistory
+        }
+        return ScanMetrics(scannedBlockCount: Int(count), maxScannedHeight: maximum.map(Int.init))
     }
 
     func movements() async throws -> [Movement] {

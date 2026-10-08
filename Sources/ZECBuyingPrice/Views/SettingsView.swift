@@ -30,7 +30,7 @@ struct SettingsView: View {
                     .font(.system(size: 11)).foregroundStyle(LabTheme.muted).lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
             }.padding(20).labPanel()
-            Label("Your credentials stay in this Mac’s Keychain.", systemImage: "lock.shield")
+            Label("Viewing keys use protected encrypted storage. Price API credentials stay in Keychain.", systemImage: "lock.shield")
                 .font(.system(size: 11)).foregroundStyle(LabTheme.muted)
         }.padding(28).frame(width: 540).background(LabTheme.ivory)
             .foregroundStyle(LabTheme.ink).tint(LabTheme.burgundy).preferredColorScheme(.light)

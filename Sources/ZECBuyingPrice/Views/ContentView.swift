@@ -9,7 +9,9 @@ struct ContentView: View {
             sidebar
             VStack(alignment: .leading, spacing: 22) {
                 header
-                if !model.connected {
+                if model.isLocked {
+                    LockedWalletView(model: model)
+                } else if !model.connected {
                     SetupView(model: model)
                 } else {
                     AcquisitionSummary(model: model)
@@ -29,11 +31,14 @@ struct ContentView: View {
         }
         .background(LabTheme.ivory).foregroundStyle(LabTheme.ink).tint(LabTheme.burgundy)
         .preferredColorScheme(.light)
+        .onChange(of: model.interfaceLocked) { _, locked in
+            if locked { confirmsReset = false }
+        }
         .alert("Reset this wallet's local history?", isPresented: $confirmsReset) {
             Button("Cancel", role: .cancel) {}
             Button("Reset", role: .destructive) { model.resetLocalHistory() }
         } message: {
-            Text("The current scan database and transaction choices will be archived on this Mac. Reconnecting starts a fresh scan. Your viewing key remains in Keychain.")
+            Text("The current scan database and transaction choices will be archived on this Mac. Reconnecting starts a fresh scan. Your viewing key and archived history remain in encrypted storage.")
         }
     }
 
@@ -47,7 +52,7 @@ struct ContentView: View {
                 }
             }.padding(.bottom, 39)
             LabCaption(text: "Workspace").padding(.leading, 12).padding(.bottom, 13)
-            Label(model.connected ? "Acquisition lab" : "Connect wallet", systemImage: "square.grid.2x2")
+            Label(model.isLocked ? "Wallet locked" : (model.connected ? "Acquisition lab" : "Connect wallet"), systemImage: "square.grid.2x2")
                 .font(.system(size: 13, weight: .semibold)).foregroundStyle(LabTheme.burgundy)
                 .padding(13).frame(maxWidth: .infinity, alignment: .leading)
                 .background(LabTheme.burgundy.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
@@ -79,8 +84,8 @@ struct ContentView: View {
     private var header: some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 5) {
-                Text(model.connected ? "Your acquisition notebook" : "Welcome to the lab.").font(LabTheme.heading(29))
-                Text(model.connected ? "Follow the movements. Find your average." : "Good observations make better decisions.")
+                Text(model.connected && !model.isLocked ? "Your acquisition notebook" : "Welcome to the lab.").font(LabTheme.heading(29))
+                Text(model.connected && !model.isLocked ? "Follow the movements. Find your average." : "Good observations make better decisions.")
                     .font(.system(size: 12)).foregroundStyle(LabTheme.muted)
             }
             Spacer()
@@ -100,7 +105,13 @@ struct ContentView: View {
                 Button("Pause", action: model.pause).buttonStyle(LabButtonStyle()).disabled(model.scanComplete && !model.busy)
                 Button("Resume", action: model.resume).buttonStyle(LabButtonStyle()).disabled(model.busy)
             }
-            ProgressView(value: model.progress).tint(LabTheme.burgundy)
+            ProgressView(value: model.progress).progressViewStyle(ScanProgressBarStyle())
+            Text(model.scanBlockSummary)
+                .font(.system(size: 12, design: .monospaced)).foregroundStyle(LabTheme.muted)
+            if let history = model.scanHistorySummary {
+                Text(history).font(.system(size: 11)).foregroundStyle(LabTheme.muted)
+                    .help("Blocks can be scanned in a different order. This height advances after every earlier block has been scanned.")
+            }
         }.padding(16).labPanel()
     }
 
@@ -110,9 +121,11 @@ struct ContentView: View {
             Text("Daily market prices are estimates, not exchange purchase records.")
                 .font(.system(size: 10)).foregroundStyle(LabTheme.muted)
             Spacer()
-            if model.connected {
+            if model.connected && !model.isLocked {
                 Menu {
                     Button("Retry historical prices", action: model.refreshPrices)
+                    Button("Lock interface", action: model.lockInterface)
+                    Button("Lock wallet & stop syncing") { model.lock() }
                     Button("Change wallet", action: model.disconnect)
                     Divider()
                     Button("Reset local history…", role: .destructive) { confirmsReset = true }

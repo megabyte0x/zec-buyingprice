@@ -39,7 +39,7 @@ struct SetupView: View {
                     .font(.system(size: 11)).foregroundStyle(LabTheme.muted).lineSpacing(3).padding(.top, 10)
                 HStack(spacing: 12) {
                     Button(action: model.connect) {
-                        HStack { Text(model.busy ? "Preparing the laboratory…" : "Start wallet analysis"); Image(systemName: "arrow.right") }
+                        HStack { Text(model.busy ? "Unlocking the laboratory…" : "Authenticate & start analysis"); Image(systemName: "arrow.right") }
                     }.buttonStyle(LabButtonStyle(primary: true)).keyboardShortcut(.return)
                         .disabled(model.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.busy)
                     if model.busy { ProgressView().controlSize(.small) }
@@ -49,7 +49,7 @@ struct SetupView: View {
                 }
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: "lock.shield").foregroundStyle(LabTheme.burgundy)
-                    Text("Stored in your Mac’s Keychain. A viewing key reveals wallet history but cannot spend your funds.")
+                    Text("Protected with Secure Enclave and encrypted storage. Touch ID or your Mac login password is required. A viewing key reveals wallet history but cannot spend funds.")
                         .font(.system(size: 11)).foregroundStyle(LabTheme.muted).lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
                 }.padding(14).background(LabTheme.parchment.opacity(0.35), in: RoundedRectangle(cornerRadius: 8)).padding(.top, 23)
